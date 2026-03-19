@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ตรวจสถานีน้ำมัน</title>
+<!-- FIX 1: ใช้ CDN ที่ sandbox รองรับ (jsdelivr) แทน cdnjs ที่อาจถูกบล็อก -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #222535;
+    --border: rgba(255,255,255,0.08); --accent: #f59e0b; --accent2: #3b82f6;
+    --text: #f1f5f9; --muted: #94a3b8; --danger: #ef4444; --success: #22c55e;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Sarabun', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 15px; line-height: 1.5; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px; position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 10px; }
+  .header-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header p { font-size: 12px; color: var(--muted); }
+  .progress-bar { height: 3px; background: var(--border); }
+  .progress-fill { height: 100%; background: var(--accent); transition: width .4s ease; border-radius: 2px; }
+  .container { padding: 16px; max-width: 480px; margin: 0 auto; }
+  .step { display: none; }
+  .step.active { display: block; }
+  .step-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--accent); text-transform: uppercase; margin-bottom: 4px; }
+  .step-title { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+  .field label span.req { color: var(--danger); margin-left: 3px; }
+  input[type="text"], input[type="tel"], input[type="date"], input[type="number"], select, textarea {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 11px 13px; color: var(--text); font-family: 'Sarabun', sans-serif; font-size: 15px;
+    outline: none; transition: border-color .2s; appearance: none; -webkit-appearance: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
+  input::placeholder { color: var(--muted); font-size: 14px; }
+  select option { background: #222535; color: var(--text); }
+  textarea { resize: none; height: 80px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .radio-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .radio-btn { flex: 1; min-width: 80px; padding: 9px 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); text-align: center; font-size: 13px; cursor: pointer; transition: all .15s; color: var(--muted); user-select: none; position: relative; }
+  .radio-btn input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .radio-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(245,158,11,.1); }
+  .radio-btn.sel-green.selected { border-color: var(--success); color: var(--success); background: rgba(34,197,94,.1); }
+  .radio-btn.sel-red.selected { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.1); }
+  .fuel-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 10px; }
+  .fuel-name { font-weight: 600; font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .fuel-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .fuel-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .fuel-row .field { margin-bottom: 0; }
+  .fuel-row .field label { font-size: 11px; }
+  .fuel-row input { padding: 8px 10px; font-size: 14px; }
+  .status-row { display: flex; gap: 6px; }
+  .status-btn { flex: 1; padding: 6px 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; text-align: center; cursor: pointer; color: var(--muted); transition: all .15s; user-select: none; }
+  .status-btn.s-normal.active { border-color: var(--success); color: var(--success); background: rgba(34,197,94,.1); }
+  .status-btn.s-low.active { border-color: var(--accent); color: var(--accent); background: rgba(245,158,11,.1); }
+  .status-btn.s-empty.active { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.1); }
+  .section-divider { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin: 18px 0 10px; display: flex; align-items: center; gap: 8px; }
+  .section-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+  .btn { flex: 1; padding: 13px; border: none; border-radius: var(--radius); font-family: 'Sarabun', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:active { transform: scale(.97); background: #d97706; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:active { transform: scale(.97); }
+  .btn-full { flex: none; width: 100%; margin-top: 10px; }
+  .summary-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+  .summary-title { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .summary-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-val { color: var(--accent); font-weight: 500; }
+  .action-btn { width: 100%; padding: 14px; border: none; border-radius: var(--radius); font-family: 'Sarabun', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; transition: all .15s; }
+  .action-btn:active { transform: scale(.98); }
+  .act-excel { background: #166534; color: #86efac; border: 1px solid #16a34a; }
+  .act-word { background: #1e3a5f; color: #93c5fd; border: 1px solid #2563eb; }
+  .act-form1 { background: #1e3a5f; color: #93c5fd; border: 1px solid #2563eb; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--success); color: #000; padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+  .geo-btn { padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--accent2); font-family: 'Sarabun', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; transition: all .15s; }
+  .geo-btn:active { transform: scale(.98); }
+  .info-note { background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.3); border-radius: var(--radius); padding: 10px 12px; font-size: 13px; color: #93c5fd; margin-bottom: 14px; line-height: 1.6; }
+  #lib-status { font-size: 12px; color: var(--muted); text-align: center; padding: 4px; }
+  #lib-status.ok { color: var(--success); }
+  #lib-status.err { color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-icon">⛽</div>
+  <div>
+    <h1>ตรวจสถานีน้ำมัน <span style="font-size:11px;font-weight:400;color:var(--accent);background:rgba(245,158,11,.15);padding:2px 7px;border-radius:6px;margin-left:4px;">Beta V1.04</span></h1>
+    <p id="step-info">ขั้นตอน 1 จาก 4</p>
+  </div>
+</header>
+<div class="progress-bar">
+  <div class="progress-fill" id="progress" style="width:25%"></div>
+</div>
+
+<div class="container">
+
+<!-- STEP 1: ข้อมูลผู้ตรวจ + สถานีเบื้องต้น -->
+<div class="step active" id="step1">
+  <div class="step-label">ขั้นตอน 1 / 4</div>
+  <div class="step-title">ข้อมูลการตรวจ</div>
+
+  <div class="field">
+    <label>วันที่ตรวจ<span class="req">*</span></label>
+    <input type="date" id="f_date">
+  </div>
+  <div class="row2">
+    <div class="field">
+      <label>เวลา</label>
+      <input type="text" id="f_time" placeholder="09:00">
+    </div>
+    <div class="field">
+      <label>จังหวัด</label>
+      <input type="text" id="f_province" value="หนองบัวลำภู" readonly style="opacity:0.7;cursor:default;">
+    </div>
+  </div>
+  <div class="field">
+    <label>ชื่อเจ้าหน้าที่<span class="req">*</span></label>
+    <input type="text" id="f_officer" placeholder="ชื่อ-นามสกุล">
+  </div>
+
+  <div class="section-divider">ข้อมูลสถานีบริการ</div>
+
+  <div class="field">
+    <label>ชื่อสถานีบริการ<span class="req">*</span></label>
+    <input type="text" id="f_station" placeholder="เช่น ปตท. สาขา...">
+  </div>
+  <div class="row2">
+    <div class="field">
+      <label>อำเภอ/เขต</label>
+      <select id="f_district" onchange="updateSubdistricts()">
+        <option value="">เลือกอำเภอ...</option>
+        <option>เมืองหนองบัวลำภู</option>
+        <option>ศรีบุญเรือง</option>
+        <option>โนนสัง</option>
+        <option>นากลาง</option>
+        <option>สุวรรณคูหา</option>
+        <option>นาวัง</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>ตำบล/แขวง</label>
+      <select id="f_subdistrict">
+        <option value="">เลือกตำบล...</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="section-divider">ข้อมูลเชื้อเพลิง</div>
+  <div id="fuel-cards"></div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" style="opacity:.4;cursor:default">← ย้อนกลับ</button>
+    <!-- FIX 2: เปลี่ยนจาก goStep(3) เป็น goStep(2) ให้ถูกต้อง -->
+    <button class="btn btn-primary" onclick="goStep(2)">ถัดไป →</button>
+  </div>
+</div>
+
+<!-- FIX 3: เพิ่ม STEP 2 ที่หายไป (ข้อมูลเพิ่มเติม: phone, company, coords, trader, status) -->
+<div class="step" id="step2">
+  <div class="step-label">ขั้นตอน 2 / 4</div>
+  <div class="step-title">รายละเอียดสถานี</div>
+
+  <div class="field">
+    <label>เลขที่ทะเบียน ม.11<span class="req">*</span></label>
+    <input type="text" id="f_license" placeholder="เช่น 11-XXXX-XXXXX">
+  </div>
+  <div class="field">
+    <label>เบอร์โทรศัพท์สถานี</label>
+    <input type="tel" id="f_phone" placeholder="0XX-XXX-XXXX">
+  </div>
+  <div class="field">
+    <label>บริษัทผู้ค้าน้ำมัน</label>
+    <input type="text" id="f_company" placeholder="เช่น บมจ.ปตท., Shell...">
+  </div>
+  <div class="field">
+    <label>ประเภทผู้ค้า</label>
+    <div class="radio-group">
+      <label class="radio-btn" onclick="selectRadio(this,'trader','มาตรา 7')"><input type="radio" name="trader">มาตรา 7</label>
+      <label class="radio-btn" onclick="selectRadio(this,'trader','มาตรา 10')"><input type="radio" name="trader">มาตรา 10</label>
+      <label class="radio-btn" onclick="selectRadio(this,'trader','มาตรา 11')"><input type="radio" name="trader">มาตรา 11</label>
+    </div>
+  </div>
+  <div class="field">
+    <label>สถานะของสถานีบริการ</label>
+    <div class="radio-group">
+      <label class="radio-btn sel-green" onclick="selectRadio(this,'status','เปิด');document.getElementById('close-detail').style.display='none'"><input type="radio" name="status">เปิดบริการ</label>
+      <label class="radio-btn sel-red" onclick="selectRadio(this,'status','ปิด');document.getElementById('close-detail').style.display='block'"><input type="radio" name="status">ปิดบริการ</label>
+    </div>
+  </div>
+  <div id="close-detail" style="display:none">
+    <div class="field">
+      <label>จำนวนวันที่ปิด</label>
+      <div class="radio-group">
+        <label class="radio-btn" onclick="selectRadio(this,'closedays','1-3 วัน')"><input type="radio" name="closedays">1-3 วัน</label>
+        <label class="radio-btn" onclick="selectRadio(this,'closedays','3-7 วัน')"><input type="radio" name="closedays">3-7 วัน</label>
+        <label class="radio-btn" onclick="selectRadio(this,'closedays','>7 วัน')"><input type="radio" name="closedays">>7 วัน</label>
+      </div>
+    </div>
+  </div>
+  <div class="field">
+    <label>พิกัด GPS (ละติจูด, ลองจิจูด)</label>
+    <input type="text" id="f_coords" placeholder="เช่น 17.2123, 102.4521">
+    <button class="geo-btn" onclick="getGPS()">📍 ดึงพิกัดอัตโนมัติ</button>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="goStep(1)">← ย้อนกลับ</button>
+    <button class="btn btn-primary" onclick="goStep(3)">ถัดไป →</button>
+  </div>
+</div>
+
+<!-- STEP 3: สาเหตุ + ผลกระทบ -->
+<div class="step" id="step3">
+  <div class="step-label">ขั้นตอน 3 / 4</div>
+  <div class="step-title">สาเหตุ &amp; ผลกระทบ</div>
+
+  <div class="field">
+    <label>สาเหตุการขาดแคลน <span style="font-size:11px;color:var(--muted)">(เลือกได้หลายข้อ)</span></label>
+    <div class="radio-group" style="flex-direction:column">
+      <label class="radio-btn" style="text-align:left;padding:8px 12px" onclick="toggleCause(this,'คลังต้นทางไม่มีสินค้า')">คลังต้นทางไม่มีสินค้า</label>
+      <label class="radio-btn" style="text-align:left;padding:8px 12px" onclick="toggleCause(this,'ผู้ค้าน้ำมันจัดสรรลดลง')">ผู้ค้าน้ำมันจัดสรรลดลง</label>
+      <label class="radio-btn" style="text-align:left;padding:8px 12px" onclick="toggleCause(this,'รถขนส่งไม่เพียงพอ')">รถขนส่งไม่เพียงพอ</label>
+      <label class="radio-btn" style="text-align:left;padding:8px 12px" onclick="toggleCause(this,'ความต้องการใช้เพิ่มสูง')">ความต้องการใช้เพิ่มสูง</label>
+      <label class="radio-btn" style="text-align:left;padding:8px 12px" onclick="toggleCause(this,'คิวโหลดคลังยาว')">คิวโหลดคลังยาว</label>
+      <label class="radio-btn" style="text-align:left;padding:8px 12px" onclick="toggleCause(this,'อื่น ๆ')">อื่น ๆ</label>
+    </div>
+  </div>
+  <div class="field" id="cause-other-box" style="display:none">
+    <label>ระบุสาเหตุอื่น</label>
+    <input type="text" id="f_cause_other" placeholder="ระบุ...">
+  </div>
+
+  <div class="field">
+    <label>มีคิวซื้อน้ำมันหรือไม่?</label>
+    <div class="radio-group">
+      <label class="radio-btn sel-red" onclick="selectRadio(this,'queue','มีคิว');document.getElementById('queue-count-box').style.display='block'"><input type="radio" name="queue">มีคิว</label>
+      <label class="radio-btn sel-green" onclick="selectRadio(this,'queue','ไม่มีคิว');document.getElementById('queue-count-box').style.display='none'"><input type="radio" name="queue">ไม่มีคิว</label>
+    </div>
+  </div>
+  <div class="field" id="queue-count-box" style="display:none">
+    <label>ประมาณกี่คัน?</label>
+    <input type="number" id="f_queue_count" placeholder="จำนวนคัน" min="0">
+  </div>
+
+  <div class="field">
+    <label>ปั๊มใกล้เคียงมีน้ำมันหรือไม่?</label>
+    <div class="radio-group">
+      <label class="radio-btn sel-green" onclick="selectRadio(this,'nearby','มีน้ำมัน')"><input type="radio" name="nearby">มีน้ำมัน</label>
+      <label class="radio-btn sel-red" onclick="selectRadio(this,'nearby','ไม่มีน้ำมัน')"><input type="radio" name="nearby">ไม่มีน้ำมัน</label>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>ราคาดีเซลที่พบ (บาท/ลิตร)</label>
+    <input type="number" id="f_diesel_price" placeholder="เช่น 33.94" step="0.01">
+  </div>
+
+  <div class="field">
+    <label>การดำเนินการของ สพจ.</label>
+    <select id="f_remark" onchange="document.getElementById('remark-other-box').style.display=this.value==='อื่น ๆ'?'block':'none'">
+      <option value="">เลือก...</option>
+      <option>แจ้งพาณิชย์จังหวัด</option>
+      <option>แจ้งความดำเนินคดี</option>
+      <option>แจ้งพาณิชย์จังหวัดและแจ้งความดำเนินคดี</option>
+      <option>อยู่ระหว่างการดำเนินการ</option>
+      <option>รับทราบและแนะนำผู้ประกอบการ</option>
+      <option>ประสานผู้ค้าน้ำมัน</option>
+      <option value="อื่น ๆ">อื่น ๆ</option>
+    </select>
+  </div>
+  <div class="field" id="remark-other-box" style="display:none">
+    <label>ระบุเพิ่มเติม</label>
+    <input type="text" id="f_remark_other" placeholder="ระบุ...">
+  </div>
+
+  <div class="btn-row">
+    <!-- FIX 4: ย้อนกลับไป step2 ให้ถูกต้อง -->
+    <button class="btn btn-secondary" onclick="goStep(2)">← ย้อนกลับ</button>
+    <button class="btn btn-primary" onclick="goStep(4)">สรุป &amp; ส่ง →</button>
+  </div>
+</div>
+
+<!-- STEP 4: สรุป + ส่ง -->
+<div class="step" id="step4">
+  <div class="step-label">ขั้นตอน 4 / 4</div>
+  <div class="step-title">ส่งข้อมูล</div>
+
+  <div class="info-note">✅ กรอกข้อมูลเรียบร้อยแล้ว กดปุ่มด้านล่างเพื่อดาวน์โหลด</div>
+  <!-- FIX 5: แสดงสถานะ library -->
+  <div id="lib-status">⏳ กำลังโหลด library...</div>
+
+  <div class="summary-box" id="summary-box"></div>
+
+  <div class="section-divider">ดาวน์โหลด Excel</div>
+  <button class="action-btn act-excel" onclick="downloadExcelSummary()">📥 Excel สรุปผลตรวจ</button>
+  <button class="action-btn act-excel" onclick="downloadExcelSurvey()">📥 Excel สำรวจราคา/ปริมาณ</button>
+  <button class="action-btn act-word" onclick="downloadWord()">📄 Word บันทึกตรวจสอบ</button>
+
+  <div class="section-divider">ส่ง Google Form</div>
+  <button class="action-btn act-form1" onclick="openForm1()">🔗 Form: ดีเซลเกินราคา (≥35 บ.)</button>
+  <button class="action-btn" style="background:#2a1f1f;color:#6b4040;border:1px solid #4a2a2a;cursor:not-allowed;opacity:.6" disabled>🔒 Form: กักตุนน้ำมัน (รอ link ใหม่)</button>
+
+  <button class="btn btn-secondary btn-full" onclick="resetForm()">+ เพิ่มสถานีใหม่</button>
+</div>
+
+</div><!-- /container -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const fuels = [
+  { id:'diesel', name:'ดีเซล',           color:'#f59e0b' },
+  { id:'e91',    name:'แก๊สโซฮอล์ 91',   color:'#3b82f6' },
+  { id:'e95',    name:'แก๊สโซฮอล์ 95',   color:'#8b5cf6' },
+  { id:'e20',    name:'แก๊สโซฮอล์ E20',  color:'#22c55e' },
+  { id:'benzin', name:'เบนซิน',           color:'#ef4444' },
+];
+let currentStep    = 1;
+let fuelStatus     = {};
+let radioVals      = {};
+let selectedCauses = new Set();
+let stationList    = []; // สะสมข้อมูลทุกสถานีที่กรอกแล้ว
+
+// ============================================================
+// FIX 6: ตรวจสอบ library พร้อมใช้งาน
+// ============================================================
+function checkLibs() {
+  const st = document.getElementById('lib-status');
+  const xlOk = typeof window.XLSX !== 'undefined';
+  const jzOk = typeof window.JSZip !== 'undefined';
+  if (xlOk && jzOk) {
+    st.textContent = '✅ พร้อมดาวน์โหลด';
+    st.className = 'ok';
+  } else {
+    st.textContent = '⚠️ กำลังโหลด library... (XLSX:' + xlOk + ' JSZip:' + jzOk + ')';
+    st.className = 'err';
+    setTimeout(checkLibs, 500);
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
+  buildFuelCards();
+  checkLibs();
+});
+
+function buildFuelCards() {
+  const container = document.getElementById('fuel-cards');
+  fuels.forEach(f => {
+    fuelStatus[f.id] = 'ปกติ';
+    const div = document.createElement('div');
+    div.className = 'fuel-card';
+    div.innerHTML = `
+      <div class="fuel-name"><span class="fuel-dot" style="background:${f.color}"></span>${f.name}</div>
+      <div class="fuel-row">
+        <div class="field"><label>ราคา (บาท/ลิตร)</label><input type="number" id="price_${f.id}" placeholder="0.00" step="0.01" oninput="syncDieselPrice('${f.id}',this.value)"></div>
+        <div class="field"><label>ความจุถัง (ลิตร)</label><input type="number" id="cap_${f.id}" placeholder="0" oninput="calcLevel('${f.id}')"></div>
+      </div>
+      <div class="fuel-row">
+        <div class="field"><label>ปริมาณคงเหลือ (ลิตร)</label><input type="number" id="remain_${f.id}" placeholder="0" oninput="calcLevel('${f.id}')"></div>
+        <div class="field"><label>ระดับคงเหลือ (%)</label><input type="text" id="level_${f.id}" placeholder="คำนวณอัตโนมัติ" readonly style="opacity:0.7;cursor:default;"></div>
+      </div>
+      <div class="status-row">
+        <div class="status-btn s-normal active" id="s_${f.id}_normal" onclick="setStatus('${f.id}','ปกติ')">ปกติ</div>
+        <div class="status-btn s-low"          id="s_${f.id}_low"    onclick="setStatus('${f.id}','ใกล้หมด')">ใกล้หมด</div>
+        <div class="status-btn s-empty"        id="s_${f.id}_empty"  onclick="setStatus('${f.id}','หมด')">หมด</div>
+      </div>`;
+    container.appendChild(div);
+  });
+}
+
+function calcLevel(id) {
+  const cap = parseFloat(document.getElementById('cap_'+id)?.value);
+  const rem = parseFloat(document.getElementById('remain_'+id)?.value);
+  const lvl = document.getElementById('level_'+id);
+  if (lvl) lvl.value = (cap > 0 && !isNaN(rem)) ? (rem/cap*100).toFixed(1) : '';
+}
+
+function syncDieselPrice(id, val) {
+  if (id === 'diesel') {
+    const f3 = document.getElementById('f_diesel_price');
+    if (f3 && !f3.dataset.manual) f3.value = val;
+  }
+}
+
+function setStatus(fuelId, status) {
+  fuelStatus[fuelId] = status;
+  ['normal','low','empty'].forEach(s => document.getElementById(`s_${fuelId}_${s}`)?.classList.remove('active'));
+  const map = {'ปกติ':'normal','ใกล้หมด':'low','หมด':'empty'};
+  document.getElementById(`s_${fuelId}_${map[status]}`)?.classList.add('active');
+}
+
+function selectRadio(el, name, val) {
+  document.querySelectorAll(`[name="${name}"]`).forEach(r => r.closest('.radio-btn')?.classList.remove('selected'));
+  el.classList.add('selected');
+  radioVals[name] = val;
+}
+
+function toggleCause(el, val) {
+  selectedCauses.has(val) ? selectedCauses.delete(val) : selectedCauses.add(val);
+  el.classList.toggle('selected', selectedCauses.has(val));
+  document.getElementById('cause-other-box').style.display = selectedCauses.has('อื่น ๆ') ? 'block' : 'none';
+}
+
+// ============================================================
+// SUBDISTRICTS
+// ============================================================
+const SUBDISTRICTS = {
+  'เมืองหนองบัวลำภู':['หนองบัว','หนองภัยศูนย์','โพธิ์ชัย','หนองสวรรค์','หัวนา','บ้านขาม','นามะเฟือง','บ้านพร้าว','โนนขมิ้น','ลำภู','กุดจิก','โนนทัน','นาคำไฮ','ป่าไม้งาม','หนองหว้า'],
+  'ศรีบุญเรือง':['เมืองใหม่','ศรีบุญเรือง','หนองบัวใต้','หนองกุงแก้ว','โนนสะอาด','ยางหล่อ','กุดสะเทียน','หันนางาม','โนนม่วง','นาแพง','หนองหว้า'],
+  'โนนสัง':['โนนสัง','บ้านโสก','ปางกู่','หนองเรือ','กุดดู่','บ้านค้อ','โคกใหญ่','นิคมพัฒนา','โนนเมือง','โคกม่วง'],
+  'นากลาง':['นากลาง','เก่ากลอย','ด่านช้าง','นากุง','ฝั่งแดง','ดงสวรรค์','กุดดินจี่','โนนเมือง','อุทัยสวรรค์'],
+  'สุวรรณคูหา':['สุวรรณคูหา','นาดี','กุดผึ้ง','นาด่าน','นาสี','บุญทัน','บ้านโคก','ดงมะไฟ'],
+  'นาวัง':['นาเหล่า','นาแก','วังปลาป้อม','วังทอง','เทพคีรี'],
+};
+function updateSubdistricts() {
+  const dist = document.getElementById('f_district').value;
+  const sub  = document.getElementById('f_subdistrict');
+  sub.innerHTML = '<option value="">เลือกตำบล...</option>';
+  (SUBDISTRICTS[dist]||[]).forEach(t => { const o=document.createElement('option'); o.value=o.textContent=t; sub.appendChild(o); });
+}
+
+// ============================================================
+// GPS
+// ============================================================
+function getGPS() {
+  if (!navigator.geolocation) { showToast('เบราว์เซอร์ไม่รองรับ GPS'); return; }
+  showToast('⏳ กำลังดึงพิกัด...');
+  navigator.geolocation.getCurrentPosition(
+    pos => { document.getElementById('f_coords').value = pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6); showToast('✅ ได้พิกัดแล้ว'); },
+    ()  => showToast('ไม่สามารถดึงพิกัดได้')
+  );
+}
+
+// ============================================================
+// STEP NAVIGATION
+// ============================================================
+function goStep(n) {
+  const cur = document.getElementById('step'+currentStep);
+  const nxt = document.getElementById('step'+n);
+  if (!nxt) { showToast('ไม่พบขั้นตอน '+n); return; }
+  if (cur) cur.classList.remove('active');
+  nxt.classList.add('active');
+  currentStep = n;
+  document.getElementById('step-info').textContent = 'ขั้นตอน '+n+' จาก 4';
+  document.getElementById('progress').style.width = (n*25)+'%';
+  window.scrollTo(0,0);
+  if (n===4) { buildSummary(); checkLibs(); }
+}
+
+function resetForm() {
+  if (!confirm('ต้องการทำเพิ่มข้อมูลต่อเนื่องจากเดิมหรือไม่ ?')) return;
+  const d = getData();
+  stationList.push(d);
+  showToast(`✅ บันทึกสถานีที่ ${stationList.length} แล้ว — กรอกสถานีถัดไปได้เลย`);
+  clearFormKeepMeta();
+  goStep(1);
+}
+
+function clearFormKeepMeta() {
+  const keepDate    = getVal('f_date');
+  const keepTime    = getVal('f_time');
+  const keepOfficer = getVal('f_officer');
+  const keepProv    = getVal('f_province');
+  ['f_station','f_district',
+   'f_license','f_phone','f_company','f_coords',
+   'f_cause_other','f_queue_count','f_diesel_price','f_remark_other'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const sub = document.getElementById('f_subdistrict');
+  if (sub) sub.innerHTML = '<option value="">เลือกตำบล...</option>';
+  const rem = document.getElementById('f_remark'); if (rem) rem.value = '';
+  ['close-detail','queue-count-box','remark-other-box','cause-other-box'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  fuels.forEach(f => {
+    ['price','cap','remain','level'].forEach(k => {
+      const el = document.getElementById(k+'_'+f.id); if (el) el.value = '';
+    });
+    setStatus(f.id, 'ปกติ');
+  });
+  radioVals = {};
+  selectedCauses = new Set();
+  document.querySelectorAll('.radio-btn.selected').forEach(el => el.classList.remove('selected'));
+  document.getElementById('f_date').value    = keepDate;
+  document.getElementById('f_time').value    = keepTime;
+  document.getElementById('f_officer').value = keepOfficer;
+  document.getElementById('f_province').value= keepProv;
+}
+
+// ============================================================
+// getData() – รวบรวมข้อมูลทั้งหมด
+// ============================================================
+function getVal(id) { const el=document.getElementById(id); return el?el.value:''; }
+function getData() {
+  return {
+    date:       getVal('f_date'),
+    time:       getVal('f_time'),
+    province:   getVal('f_province'),
+    officer:    getVal('f_officer'),
+    station:    getVal('f_station'),
+    district:   getVal('f_district'),
+    subdistrict:getVal('f_subdistrict'),
+    phone:      getVal('f_phone'),       // step2
+    license:    getVal('f_license'),     // step2 เลขที่ทะเบียน ม.11
+    company:    getVal('f_company'),     // step2
+    coords:     getVal('f_coords'),      // step2
+    trader:     radioVals['trader']   || '',
+    status:     radioVals['status']   || 'เปิด',
+    closedays:  radioVals['closedays']|| '',
+    cause: (()=>{
+      const arr = Array.from(selectedCauses);
+      const other = getVal('f_cause_other');
+      return arr.includes('อื่น ๆ') ? arr.filter(c=>c!=='อื่น ๆ').concat(other?[other]:[]).join(', ') : arr.join(', ');
+    })(),
+    cause_other: getVal('f_cause_other'),
+    queue:       radioVals['queue']  || '',
+    queue_count: getVal('f_queue_count'),
+    nearby:      radioVals['nearby'] || '',
+    diesel_price:getVal('f_diesel_price'),
+    remark: (()=>{ const r=getVal('f_remark'); const o=getVal('f_remark_other'); return r==='อื่น ๆ'&&o?o:r; })(),
+    fuels: fuels.map(f=>({
+      name:     f.name,
+      price:    getVal('price_'+f.id),
+      capacity: getVal('cap_'+f.id),
+      remain:   getVal('remain_'+f.id),
+      level:    getVal('level_'+f.id),
+      status:   fuelStatus[f.id]||'ปกติ'
+    }))
+  };
+}
+
+// ============================================================
+// SUMMARY
+// ============================================================
+function buildSummary() {
+  const d = getData();
+  const prevCount = stationList.length;
+  document.getElementById('summary-box').innerHTML = `
+    <div class="summary-title">สถานีที่ ${prevCount+1} (ปัจจุบัน)</div>
+    <div class="summary-row"><span>วันที่</span><span class="summary-val">${d.date} ${d.time}</span></div>
+    <div class="summary-row"><span>สถานี</span><span class="summary-val">${d.station||'-'}</span></div>
+    <div class="summary-row"><span>อำเภอ</span><span class="summary-val">${d.district||'-'} ${d.subdistrict||''}</span></div>
+    <div class="summary-row"><span>สถานะ</span><span class="summary-val">${d.status}${d.closedays?' ('+d.closedays+')':''}</span></div>
+    ${d.fuels.map(f=>`<div class="summary-row"><span>${f.name}</span><span class="summary-val">${f.price?f.price+' บ.':'-'} | ${f.status}</span></div>`).join('')}
+    <div class="summary-row"><span>สาเหตุ</span><span class="summary-val">${d.cause||'-'}</span></div>
+    ${prevCount>0?`<div class="summary-row" style="color:var(--accent)"><span>สะสมแล้ว</span><span class="summary-val">${prevCount} สถานีก่อนหน้า</span></div>`:''}`;
+}
+
+// ============================================================
+// FIX 7: triggerDownload – ใช้ data: URI หลัก (sandbox-safe)
+// ============================================================
+function triggerDownload(base64data, filename, mime) {
+  if (!base64data || base64data.length < 10) { showToast('❌ ไม่มีข้อมูล'); return; }
+  try {
+    // วิธี 1: data URI (ทำงานใน sandbox ได้เสมอ)
+    const link = document.createElement('a');
+    link.href = 'data:'+mime+';base64,'+base64data;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('✅ กำลัง download: '+filename);
+  } catch(e) {
+    console.error('[Download]', e);
+    // วิธี 2: Blob URL fallback
+    try {
+      const byteChars = atob(base64data);
+      const byteArr   = new Uint8Array(byteChars.length);
+      for (let i=0;i<byteChars.length;i++) byteArr[i]=byteChars.charCodeAt(i);
+      const blob = new Blob([byteArr],{type:mime});
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url),3000);
+      showToast('✅ '+filename);
+    } catch(e2) { showToast('❌ '+e2.message); }
+  }
+}
+
+// ============================================================
+// FIX 8: XLSX helper พร้อม guard
+// ============================================================
+function downloadXLSX(wb, filename) {
+  if (typeof window.XLSX === 'undefined') { showToast('❌ XLSX library ยังไม่โหลด กรุณารอแล้วลองใหม่'); return; }
+  try {
+    const b64 = XLSX.write(wb, {bookType:'xlsx', type:'base64'});
+    triggerDownload(b64, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  } catch(e) { showToast('❌ สร้าง Excel ไม่ได้: '+e.message); console.error(e); }
+}
+
+// ============================================================
+// EXCEL SUMMARY
+// ============================================================
+function downloadExcelSummary() {
+  if (typeof window.XLSX === 'undefined') { showToast('❌ XLSX ยังไม่พร้อม'); return; }
+  const d  = getData();
+  const wb = XLSX.utils.book_new();
+  const regions = ['กรุงเทพฯ','ภาคกลาง','ภาคอีสาน','ภาคเหนือ','ภาคใต้'];
+  const regionMap = {
+    'หนองบัวลำภู':'ภาคอีสาน','ขอนแก่น':'ภาคอีสาน','อุดรธานี':'ภาคอีสาน',
+    'นครราชสีมา':'ภาคอีสาน','อุบลราชธานี':'ภาคอีสาน','สกลนคร':'ภาคอีสาน',
+    'เชียงใหม่':'ภาคเหนือ','เชียงราย':'ภาคเหนือ','ลำปาง':'ภาคเหนือ',
+    'สงขลา':'ภาคใต้','สุราษฎร์ธานี':'ภาคใต้','นครศรีธรรมราช':'ภาคใต้',
+    'กรุงเทพมหานคร':'กรุงเทพฯ',
+  };
+  const targetRegion = regionMap[d.province] || 'ภาคกลาง';
+  const headers = ['ลำดับที่','ชื่อสถานี','ตำบล/แขวง','อำเภอ/เขต','จังหวัด','โทรศัพท์','พิกัด','เปิด/ปิด','วันที่ปิด','ผู้ค้า','ดีเซล','91','95','E20','เบนซิน','สาเหตุ','คิว','ปั๊มใกล้เคียง','หมายเหตุ'];
+  const row = [1,d.station,d.subdistrict,d.district,d.province,d.phone,d.coords,d.status,d.closedays,d.trader,
+    d.fuels[0].status,d.fuels[1].status,d.fuels[2].status,d.fuels[3].status,d.fuels[4].status,
+    d.cause,d.queue+(d.queue_count?' ('+d.queue_count+' คัน)':''),d.nearby,d.remark];
+
+  regions.forEach(region => {
+    const wsData = [['สรุปผลการตรวจสอบสถานีบริการน้ำมัน'],[],headers];
+    if (region===targetRegion) wsData.push(row);
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = headers.map(()=>({wch:18}));
+    XLSX.utils.book_append_sheet(wb, ws, region);
+  });
+  downloadXLSX(wb, `สรุปตรวจสอบ_${d.station||'สถานี'}_${d.date}.xlsx`);
+}
+
+// helper ดึงสถานีทั้งหมด (สะสม + ปัจจุบัน)
+function getAllStations() { return [...stationList, getData()]; }
+
+// ============================================================
+// EXCEL SUMMARY – สะสมทุกสถานี
+// ============================================================
+function downloadExcelSummary() {
+  if (typeof window.XLSX === 'undefined') { showToast('❌ XLSX ยังไม่พร้อม'); return; }
+  const all = getAllStations();
+  const wb  = XLSX.utils.book_new();
+  const regions = ['กรุงเทพฯ','ภาคกลาง','ภาคอีสาน','ภาคเหนือ','ภาคใต้'];
+  const regionMap2 = {
+    'หนองบัวลำภู':'ภาคอีสาน','ขอนแก่น':'ภาคอีสาน','อุดรธานี':'ภาคอีสาน',
+    'นครราชสีมา':'ภาคอีสาน','อุบลราชธานี':'ภาคอีสาน','สกลนคร':'ภาคอีสาน',
+    'เชียงใหม่':'ภาคเหนือ','เชียงราย':'ภาคเหนือ','ลำปาง':'ภาคเหนือ',
+    'สงขลา':'ภาคใต้','สุราษฎร์ธานี':'ภาคใต้','นครศรีธรรมราช':'ภาคใต้',
+    'กรุงเทพมหานคร':'กรุงเทพฯ',
+  };
+  const headers = ['ลำดับที่','ชื่อสถานี','ตำบล/แขวง','อำเภอ/เขต','จังหวัด','โทรศัพท์','พิกัด','เปิด/ปิด','วันที่ปิด','ผู้ค้า','ดีเซล','91','95','E20','เบนซิน','สาเหตุ','คิว','ปั๊มใกล้เคียง','หมายเหตุ'];
+  const byRegion = {}; regions.forEach(r=>byRegion[r]=[]);
+  all.forEach((d,i) => {
+    const r = regionMap2[d.province]||'ภาคกลาง';
+    byRegion[r].push([i+1,d.station,d.subdistrict,d.district,d.province,d.phone,d.coords,d.status,d.closedays,d.trader,
+      d.fuels[0].status,d.fuels[1].status,d.fuels[2].status,d.fuels[3].status,d.fuels[4].status,
+      d.cause,d.queue+(d.queue_count?' ('+d.queue_count+' คัน)':''),d.nearby,d.remark]);
+  });
+  regions.forEach(region => {
+    const wsData = [['สรุปผลการตรวจสอบสถานีบริการน้ำมัน'],[],headers,...byRegion[region]];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = headers.map(()=>({wch:18}));
+    XLSX.utils.book_append_sheet(wb, ws, region);
+  });
+  const d0 = all[0];
+  downloadXLSX(wb, `สรุปตรวจสอบ_${d0.date}_${all.length}สถานี.xlsx`);
+}
+
+// ============================================================
+// EXCEL SURVEY – สะสมทุกสถานีใน 4 sheet
+// ============================================================
+function chkTrader(trader, type) {
+  if (type==='ม.7'  && trader==='มาตรา 7')  return '✓';
+  if (type==='ม.10' && trader==='มาตรา 10') return '✓';
+  if (type==='อื่น' && !['มาตรา 7','มาตรา 10','มาตรา 11'].includes(trader) && trader) return '✓';
+  return '';
+}
+function downloadExcelSurvey() {
+  if (typeof window.XLSX === 'undefined') { showToast('❌ XLSX ยังไม่พร้อม'); return; }
+  const all  = getAllStations();
+  const wb   = XLSX.utils.book_new();
+  const d0   = all[0];
+  const prov = d0.province||'...........................';
+
+  // Sheet 1
+  const s1rows = all.map((d,i) => {
+    const loc = [d.subdistrict,d.district,d.province].filter(Boolean).join(' ');
+    const ml  = d.coords?`https://www.google.com/maps/search/?api=1&query=${d.coords.replace(/ /g,'')}`:'' ;
+    return [i+1,d.station,d.license||'',loc,ml,d.coords,d.fuels[2].price||'',d.fuels[1].price||'',d.fuels[4].price||'',d.fuels[0].price||'',d.remark||'',''];
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet([
+    ['','','','','','','แบบน้ำมันเชื้อเพลิง 1'],
+    [`แบบสำรวจราคาจำหน่ายน้ำมันเชื้อเพลิง ณ สถานีบริการ (ราคาสูงผิดปกติ) จังหวัด ${prov}`],
+    [],
+    ['ลำดับ','ชื่อสถานีบริการ','เลขที่ทะเบียน','ที่ตั้ง','link google map','พิกัด','ราคาจำหน่าย (บาท/ลิตร)','','','','ผลการตรวจ','หมายเหตุ'],
+    ['','','','','','','แก๊สโซฮอล์ 95','แก๊สโซฮอล์ 91','เบนซิน','ดีเซล','',''],
+    ...s1rows
+  ]);
+  ws1['!cols'] = [{wch:6},{wch:22},{wch:12},{wch:22},{wch:28},{wch:18},{wch:14},{wch:14},{wch:10},{wch:10},{wch:22},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'แบบน้ำมัน 1 (ราคา)');
+
+  // Sheet 2
+  const s2rows = all.map((d,i) => {
+    const loc = [d.subdistrict,d.district,d.province].filter(Boolean).join(' ');
+    const ml  = d.coords?`https://www.google.com/maps/search/?api=1&query=${d.coords.replace(/ /g,'')}`:'' ;
+    return [i+1,d.station,d.license||'',loc,ml,d.coords,'','','','',d.company||'','',chkTrader(d.trader,'ม.7'),chkTrader(d.trader,'ม.10'),d.fuels[2].remain||'',d.fuels[1].remain||'',d.fuels[4].remain||'',d.fuels[0].remain||'',''];
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet([
+    ['','','','','','','แบบน้ำมันเชื้อเพลิง 2'],
+    [`แบบสำรวจปริมาณการจัดหาน้ำมันเชื้อเพลิง สถานีบริการ/โรงงาน จังหวัด ${prov}`],
+    [],
+    ['ลำดับ','ชื่อสถานประกอบการ','เลขที่ทะเบียน','ที่ตั้ง','link','พิกัด','ยอดขายรวม/เดือน (ลิตร)','','','','ซื้อน้ำมันจาก','','ประเภทผู้ค้า','','ประเภทน้ำมัน (ลิตร)','','','','หมายเหตุ'],
+    ['','','','','','','ก๊าซ95','ก๊าซ91','เบนซิน','ดีเซล','ชื่อผู้จำหน่าย','ที่ตั้ง','ม.7','ม.10','ก๊าซ95','ก๊าซ91','เบนซิน','ดีเซล',''],
+    ...s2rows
+  ]);
+  ws2['!cols'] = [{wch:5},{wch:20},{wch:10},{wch:20},{wch:25},{wch:18},{wch:10},{wch:10},{wch:8},{wch:8},{wch:20},{wch:16},{wch:6},{wch:6},{wch:10},{wch:10},{wch:8},{wch:8},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'แบบน้ำมัน 2 (ปริมาณ)');
+
+  // Sheet 3
+  const ws3 = XLSX.utils.aoa_to_sheet([
+    ['แบบน้ำมันเชื้อเพลิง 3'],
+    [`รายงานสรุปยอดความต้องการน้ำมันของผู้ค้า จังหวัด ${prov}`],
+    [],
+    ['ลำดับ','ชื่อผู้จำหน่าย','ก๊าซ95 (ลิตร)','ก๊าซ91','เบนซิน','ดีเซล','อื่นๆ','คลังต้นทาง','หมายเหตุ'],
+    ...all.map((d,i)=>[i+1,d.company||'',d.fuels[2].remain||'',d.fuels[1].remain||'',d.fuels[4].remain||'',d.fuels[0].remain||'','','',''])
+  ]);
+  ws3['!cols'] = [{wch:5},{wch:24},{wch:12},{wch:12},{wch:10},{wch:10},{wch:10},{wch:22},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'แบบน้ำมัน 3 (ผู้ค้า)');
+
+  // Sheet 4 (2ก) – แต่ละสถานีเป็นกลุ่ม
+  const s4hdr = ['ลำดับ','ชื่อผู้จำหน่าย','ที่ตั้ง','ม.7','ม.10','อื่น','ก๊าซ95 (ลิตร)','ก๊าซ91','เบนซิน','ดีเซล','อื่น','หมายเหตุ'];
+  const s4data = [['แบบน้ำมันเชื้อเพลิง 2ก']];
+  all.forEach((d,i) => {
+    const loc = [d.subdistrict,d.district,d.province].filter(Boolean).join(' ');
+    s4data.push([`[${i+1}] ชื่อสถานประกอบการ  ${d.station||''}  ทะเบียน ม.11 เลขที่  ${d.license||''}  ที่ตั้ง  ${loc}`]);
+    s4data.push(s4hdr);
+    s4data.push([1,d.company||'','',chkTrader(d.trader,'ม.7'),chkTrader(d.trader,'ม.10'),chkTrader(d.trader,'อื่น'),d.fuels[2].remain||'',d.fuels[1].remain||'',d.fuels[4].remain||'',d.fuels[0].remain||'','','']);
+    s4data.push([]);
+  });
+  const ws4 = XLSX.utils.aoa_to_sheet(s4data);
+  ws4['!cols'] = [{wch:5},{wch:22},{wch:16},{wch:6},{wch:6},{wch:6},{wch:12},{wch:12},{wch:10},{wch:10},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws4, 'แบบน้ำมัน 2ก (ผปก.)');
+
+  downloadXLSX(wb, `สำรวจราคา_${d0.date}_${all.length}สถานี.xlsx`);
+}
+
+// ============================================================
+// WORD – ต่อเนื่องทุกสถานีในไฟล์เดียว
+// ============================================================
+async function downloadWord() {
+  if (typeof window.JSZip === 'undefined') { showToast('❌ JSZip ยังไม่พร้อม กรุณารอแล้วลองใหม่'); return; }
+  showToast('⏳ กำลังสร้างไฟล์ Word...');
+  await new Promise(r=>setTimeout(r,80));
+  const xe   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const F    = 'TH SarabunPSK';
+  const rpr  = (b,sz='28') => `<w:rPr><w:rFonts w:ascii="${F}" w:hAnsi="${F}" w:cs="${F}"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>${b?'<w:b/>':''}</w:rPr>`;
+  const run  = (text,b=false,sz='28') => text?`<w:r>${rpr(b,sz)}<w:t xml:space="preserve">${xe(text)}</w:t></w:r>`:'';
+  const pp   = (content,opts={}) => {
+    const {align='',indL=0,before=40,after=40}=opts;
+    return `<w:p><w:pPr><w:spacing w:before="${before}" w:after="${after}"/>${align?`<w:jc w:val="${align}"/>`:''}${indL?`<w:ind w:left="${indL}"/>`:''}</w:pPr>${content}</w:p>`;
+  };
+  const blank= (h=60) => `<w:p><w:pPr><w:spacing w:before="0" w:after="${h}"/></w:pPr></w:p>`;
+  const pb   = () => `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+  const ck   = v  => v ? '☑' : '☐';
+  const ckL  = (v,label,ind=360) => pp(run(ck(v)+'  '+label),{indL:ind,before:30,after:30});
+  const D    = n  => '.'.repeat(n);
+  const S    = n  => '\u00a0'.repeat(n);
+
+  // Fuel table
+  const FC  = [1600,1200,1300,1500,1300,2738];
+  const tblPr = `<w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders>
+    <w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+    <w:left w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+    <w:bottom w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+    <w:right w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+    <w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+    <w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+  </w:tblBorders><w:tblCellMar>
+    <w:top w:w="60" w:type="dxa"/><w:left w:w="80" w:type="dxa"/>
+    <w:bottom w:w="60" w:type="dxa"/><w:right w:w="80" w:type="dxa"/>
+  </w:tblCellMar></w:tblPr>`;
+  const grid = FC.map(c=>`<w:gridCol w:w="${c}"/>`).join('');
+  const tc = (content,w,al='left') =>
+    `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/></w:tcPr>${pp(content,{align:al,before:60,after:60})}</w:tc>`;
+  const fHdr = () => `<w:tr>
+    ${tc(run('ชนิดน้ำมัน',true,'24'),FC[0],'center')}
+    ${tc(run('ราคา (บาท/ลิตร)',true,'24'),FC[1],'center')}
+    ${tc(run('ความจุถัง (ลิตร)',true,'24'),FC[2],'center')}
+    ${tc(run('ปริมาณคงเหลือ (ลิตร)',true,'24'),FC[3],'center')}
+    ${tc(run('ระดับ (%)',true,'24'),FC[4],'center')}
+    ${tc(run('สถานะ',true,'24'),FC[5],'center')}
+  </w:tr>`;
+  const fRow = (fuel) => {
+    const s = fuel ? fuel.status||'' : '';
+    const st = run(`${ck(s==='ปกติ')} ปกติ  ${ck(s==='ใกล้หมด')} ใกล้หมด  ${ck(s==='หมด')} หมด`);
+    return `<w:tr>
+      ${tc(run(fuel?fuel.name:''),FC[0])}
+      ${tc(run(fuel?fuel.price||'':''),FC[1],'center')}
+      ${tc(run(fuel?fuel.capacity||'':''),FC[2],'center')}
+      ${tc(run(fuel?fuel.remain||'':''),FC[3],'center')}
+      ${tc(run(fuel&&fuel.level?fuel.level+'%':''),FC[4],'center')}
+      ${tc(st,FC[5])}
+    </w:tr>`;
+  };
+  const fTbl = rows => `<w:tbl>${tblPr}<w:tblGrid>${grid}</w:tblGrid>${fHdr()}${rows.join('')}</w:tbl>`;
+  const sig  = role => [blank(40),
+    pp(run(S(30)+'(ลงชื่อ)  '+D(30)+'  '+role)),
+    pp(run(S(37)+'('+D(30)+')')),
+    pp(run(S(30)+'ตำแหน่ง  '+D(40))),
+  ].join('');
+
+  const all = getAllStations();
+  const d0  = all[0];
+
+  // สร้าง body XML สำหรับทุกสถานี ต่อเนื่องกัน
+  const makeStationBody = (d, idx, isLast) => {
+    const causeSet = new Set((d.cause||'').split(', ').map(s=>s.trim()));
+    return [
+      pp(run(`สถานีที่ ${idx+1}/${all.length} — บันทึกการตรวจสอบสถานีบริการน้ำมันเชื้อเพลิง`,true),{align:'center',before:0,after:20}),
+      pp([run(S(40)+'วันที่  '),run(d.date),run('   เวลา  '),run(d.time||'')].join(''),{align:'right'}),
+      pp([run('เจ้าหน้าที่  '),run(d.officer||D(35))].join('')),
+      blank(20),
+      pp(run('1. ข้อมูลสถานี',true)),
+      pp([run('  ชื่อสถานี  '),run(d.station||D(35))].join('')),
+      pp([run('  ตำบล  '),run(d.subdistrict||D(14)),run('  อำเภอ  '),run(d.district||D(14)),run('  จังหวัด  '),run(d.province||D(14))].join('')),
+      pp([run('  บริษัทผู้ค้า  '),run(d.company||D(30)),run('  ทะเบียน ม.11 เลขที่  '),run(d.license||D(16))].join('')),
+      pp([run('  โทร  '),run(d.phone||D(28))].join('')),
+      pp([run('  พิกัด  '),run(d.coords||D(30))].join('')),
+      blank(10),
+      pp(run('  สถานะ')),
+      ckL(d.status==='เปิด','เปิดให้บริการ'),
+      ckL(d.status==='ปิด','ปิดให้บริการ'),
+      blank(10),
+      pp(run('2. ข้อมูลเชื้อเพลิง',true)),
+      blank(6),
+      fTbl(d.fuels.map(f=>fRow(f))),
+      blank(20),
+      pp(run('3. สาเหตุการขาดแคลน',true)),
+      ckL(causeSet.has('คลังต้นทางไม่มีสินค้า'),'คลังต้นทางไม่มีสินค้า'),
+      ckL(causeSet.has('ผู้ค้าน้ำมันจัดสรรลดลง'),'ผู้ค้าน้ำมันจัดสรรลดลง'),
+      ckL(causeSet.has('รถขนส่งไม่เพียงพอ'),'รถขนส่งไม่เพียงพอ'),
+      ckL(causeSet.has('ความต้องการใช้เพิ่มสูง'),'ความต้องการใช้น้ำมันเพิ่มสูง'),
+      ckL(causeSet.has('คิวโหลดคลังยาว'),'คิวโหลดคลังยาว'),
+      pp([run('  '+ck(causeSet.has('อื่น ๆ'))+' อื่นๆ  '),run(d.cause_other||D(28))].join(''),{indL:360}),
+      blank(20),
+      pp(run('4. ผลกระทบ',true)),
+      pp([run('  คิวซื้อน้ำมัน: '),run(d.queue||'-'),run(d.queue_count?'  จำนวน '+d.queue_count+' คัน':'')].join('')),
+      pp([run('  ปั๊มใกล้เคียง: '),run(d.nearby||'-')].join('')),
+      pp([run('  ราคาดีเซลที่พบ: '),run(d.diesel_price?d.diesel_price+' บาท/ลิตร':'-')].join('')),
+      blank(20),
+      pp(run('5. การดำเนินการ',true)),
+      pp([run('  '),run(d.remark||D(60))].join('')),
+      blank(40),
+      sig('พนักงานเจ้าหน้าที่'),
+      isLast ? '' : pb(), // page break ระหว่างสถานี ยกเว้นสถานีสุดท้าย
+    ].join('');
+  };
+
+  const body = all.map((d,i) => makeStationBody(d, i, i===all.length-1)).join('');
+
+
+  const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>${body}
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+
+  const CT = `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default ContentType="application/vnd.openxmlformats-package.relationships+xml" Extension="rels"/><Default ContentType="application/xml" Extension="xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" PartName="/word/document.xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml" PartName="/word/styles.xml"/><Override ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml" PartName="/word/settings.xml"/></Types>`;
+  const RL = `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const DR = `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/></Relationships>`;
+  const ST = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="TH SarabunPSK" w:cs="TH SarabunPSK" w:hAnsi="TH SarabunPSK"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:rPrDefault><w:pPrDefault/></w:docDefaults></w:styles>`;
+  const SE = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:compat><w:compatSetting w:val="15" w:uri="http://schemas.microsoft.com/office/word" w:name="compatibilityMode"/></w:compat></w:settings>`;
+
+  try {
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', CT);
+    zip.file('_rels/.rels', RL);
+    zip.file('word/_rels/document.xml.rels', DR);
+    zip.file('word/styles.xml', ST);
+    zip.file('word/settings.xml', SE);
+    zip.file('word/document.xml', docXml);
+    const buf = await zip.generateAsync({type:'base64', compression:'DEFLATE'});
+    triggerDownload(buf,
+      `บันทึกตรวจสอบ_${d0.date||'วันที่'}_${all.length}สถานี.docx`,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    showToast('✅ ดาวน์โหลด Word สำเร็จ');
+  } catch(e) { showToast('❌ '+e.message); console.error(e); }
+}
+
+// ============================================================
+// GOOGLE FORM
+// ============================================================
+function openForm1() {
+  const d = getData();
+  const [y,m,day] = (d.date||'').split('-');
+  const dateUS = (m&&day&&y) ? `${m}/${day}/${y}` : '';
+  const price  = d.diesel_price || d.fuels[0].price || '';
+  const location = [d.station,d.subdistrict,d.district,d.province,d.coords].filter(Boolean).join(' ');
+  const params = new URLSearchParams({
+    'entry.1166974500': 'จังหวัด'+d.province,
+    'entry.1228565738': dateUS,
+    'entry.671006502':  price,
+    'entry.495085411':  d.cause,
+    'entry.1502927568': location,
+    'entry.584532945':  d.remark||'',
+  });
+  window.open(`https://docs.google.com/forms/d/e/1FAIpQLSeu6IauVNuT1e4D1jIIEN66IyY19D3diz7-8jSeNd3VsMo-CQ/viewform?${params}`, '_blank');
+  showToast('✅ เปิด Form แล้ว');
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
