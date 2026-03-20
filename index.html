@@ -307,7 +307,7 @@
 
   <div class="section-divider">ส่ง Google Form</div>
   <button class="action-btn act-form1" onclick="openForm1()">🔗 Form: ดีเซลเกินราคา (≥35 บ.)</button>
-  <button class="action-btn" style="background:#2a1f1f;color:#6b4040;border:1px solid #4a2a2a;cursor:not-allowed;opacity:.6" disabled>🔒 Form: กักตุนน้ำมัน (รอ link ใหม่)</button>
+  <button class="action-btn act-form1" onclick="window.open('https://forms.gle/tStcQLYdUbuHvQTJ9','_blank')" style="background:#3b1f5e;color:#c4b5fd;border:1px solid #7c3aed;">🔗 Form: กักตุนน้ำมัน</button>
 
   <button class="btn btn-secondary btn-full" onclick="resetForm()">+ เพิ่มสถานีใหม่</button>
 </div>
@@ -915,7 +915,7 @@ function openForm1() {
     'entry.1502927568': location,
     'entry.584532945':  d.remark||'',
   });
-  window.open(`https://docs.google.com/forms/d/e/1FAIpQLSeu6IauVNuT1e4D1jIIEN66IyY19D3diz7-8jSeNd3VsMo-CQ/viewform?${params}`, '_blank');
+  window.open(`https://docs.google.com/forms/d/e/1FAIpQLSfyzMoz1_vh8ket7simts0xTLX_Gy9sm1NWjQSkqdfqJGyRPQ/viewform?usp=publish-editor`, '_blank');
   showToast('✅ เปิด Form แล้ว');
 }
 
@@ -931,6 +931,7 @@ function showToast(msg) {
 </script>
 </body>
 </html>
+
 
 
 
